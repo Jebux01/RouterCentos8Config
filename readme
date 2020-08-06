@@ -1,0 +1,129 @@
+Para crear un router con Centos y conectarse con esta a la red local
+
+como ejemplo tendremos 2 interfaces 
+
+eth0 ← esta es la que nos da salida a internet 
+eth1 ← esta es la que nos da a acceso a nuestra red local
+
+cabe destacar que esta configuracion nos da acceso a la red local anterior 
+(ejemplo si tenemos una red local con el segmento 192.168.1.*) si configuramos desde ahi tendremos acceso a nuestra red local, pero si configuramos con nuestro modem, solo nos dara salida a internet
+
+instalamos Centos 8 minimalista
+
+asignamos la ip statica a la interfaz que queremos que distribuya el internet 
+puedes hacerlo por consola o con “nmtui” 
+
+asigamos la ip en este ejemplo lo hare con la ip 192.168.5.1, este sera el segmento de la ip que tendra nuestra red lan en la interfaz eth1
+
+la interfaz eth0 puede quedar como DHCP o puedes asignarle una ip estatica, esa seria decision tuya.
+
+asignamos ip 192.168.5.1/24
+
+instalamos dhcp server 
+
+“dnf install dhcp-server”
+
+pasamos a configurar nuestro servidor DHCP 
+
+nano “/etc/dhcp/dhcpd.conf”
+
+dentro de este vamos a crear la subred y rango de nuestra red lan
+
+default-lease-time 600;
+max-lease-time 7200;
+ddns-update-style none;
+authoritative;
+subnet 192.168.5.0 netmask 255.255.255.0 {
+	range 192.168.5.10 192.168.15.252;
+	option routers 192.168.15.1;
+	option subnet-mask 255.255.255.0;
+	option domain-name-servers 8.8.8.8, 8.8.4.4;
+}
+
+range define las ip asignables en el rango del DHCP
+router es la puerta de entrada 
+subnet-mask es la mascara de red
+domain-name-serve son los dns que usaremos
+
+luego de esto iniciamos el servicio
+
+systemctl start dhcpd 
+
+revisamos el status 
+
+systemctl status dhcpd
+
+pasamos a habilitarlo
+
+systemctl enable dhcpd
+y reiniciamos 
+
+systemctl restart dhcpd
+
+*****ya terminado esto pasamos a configurar nuestro iptables para generar las reglas
+
+para esto instalamos iptables
+
+dnf install iptables-services
+
+eliminamos el servicio de firewalld
+
+systemctl mask firewalld
+
+anadimos el servicio de iptables
+
+systemctl enable iptables
+
+paramos el servicio de firewall
+
+systemctl stop firewalld
+
+iniciamos el servicio de iptables
+
+systemctl start iptables
+
+con esto ya tenemos nuestro iptables online
+
+****vamos a configurar nuestro enrutamiento***
+
+limpiamos todas las reglas de nuestra tabla 
+
+iptables “--flush” (sin comillas)
+
+iptables “--table nat” “--flush”
+
+iptables “--delete-chain”
+
+iptables “--table nat” “--delete-chain”
+
+Aqui tendriamos dos opciones asi que pondre para ambas, si quieres salir por tu ip  publica 
+
+esta regla es para que solo pasemos de nuestra red local a la nueva subred
+
+iptables --table nat --append POSTROUTING --out-interface eth0 -j MASQUERADE
+
+despues de esto asignamos el compartir los packetes 
+
+echo 1 > /proc/sys/net/ipv4/ip_forward
+
+para esto ya guardamos nuestra configuracion 
+
+iptables-save
+
+service iptables restart
+
+systemctl restart iptables
+
+Listo con esto tendriamos un servidor Centos como router
+
+
+
+
+
+Esto es extra ya que por motivos de un blacklist tuve que conectarme a una vpn y luego darle salida 
+
+solo agregamos otra linea mas antes de guardar y reiniciar cambios
+
+iptables --table nat --append POSTROUTING --out-interface (interface VPN) -j MASQUERADE
+
+y listo ya salimos por vpn y queda nuestr red local andando
